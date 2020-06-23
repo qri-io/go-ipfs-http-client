@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/ipfs/go-cid"
-	"github.com/ipfs/interface-go-ipfs-core"
+	iface "github.com/ipfs/interface-go-ipfs-core"
 	caopts "github.com/ipfs/interface-go-ipfs-core/options"
 	"github.com/ipfs/interface-go-ipfs-core/path"
 	"github.com/pkg/errors"
@@ -24,6 +24,7 @@ type pinRefKeyList struct {
 type pin struct {
 	path path.Resolved
 	typ  string
+	err  error
 }
 
 func (p *pin) Path() path.Resolved {
@@ -32,6 +33,10 @@ func (p *pin) Path() path.Resolved {
 
 func (p *pin) Type() string {
 	return p.typ
+}
+
+func (p *pin) Err() error {
+	return p.err
 }
 
 func (api *PinAPI) Add(ctx context.Context, p path.Path, opts ...caopts.PinAddOption) error {
@@ -44,7 +49,7 @@ func (api *PinAPI) Add(ctx context.Context, p path.Path, opts ...caopts.PinAddOp
 		Option("recursive", options.Recursive).Exec(ctx, nil)
 }
 
-func (api *PinAPI) Ls(ctx context.Context, opts ...caopts.PinLsOption) ([]iface.Pin, error) {
+func (api *PinAPI) Ls(ctx context.Context, opts ...caopts.PinLsOption) (<-chan iface.Pin, error) {
 	options, err := caopts.PinLsOptions(opts...)
 	if err != nil {
 		return nil, err
@@ -57,16 +62,20 @@ func (api *PinAPI) Ls(ctx context.Context, opts ...caopts.PinLsOption) ([]iface.
 		return nil, err
 	}
 
-	pins := make([]iface.Pin, 0, len(out.Keys))
+	pins := make(chan iface.Pin, len(out.Keys))
 	for hash, p := range out.Keys {
 		c, err := cid.Parse(hash)
 		if err != nil {
 			return nil, err
 		}
-		pins = append(pins, &pin{typ: p.Type, path: path.IpldPath(c)})
+		pins <- &pin{typ: p.Type, path: path.IpldPath(c)}
 	}
 
 	return pins, nil
+}
+
+func (api *PinAPI) IsPinned(ctx context.Context, p path.Path, opts ...caopts.PinIsPinnedOption) (string, bool, error) {
+	return "", false, errors.New("IsPinned is not supported when using IPFS over HTTP")
 }
 
 func (api *PinAPI) Rm(ctx context.Context, p path.Path, opts ...caopts.PinRmOption) error {
